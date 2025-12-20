@@ -1,0 +1,12 @@
+# Jupyter Core
+jupyter
+notebook
+jupyterlab
+
+# Data Science Libraries
+numpy
+pandas
+matplotlib
+
+# Utility
+requests
