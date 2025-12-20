@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link Shortener</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+          Cantarell, Noto Sans, sans-serif;
+        margin: 2rem;
+        color: #222;
+      }
+      .card {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 1.5rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 1rem;
+      }
+      h2 {
+        font-size: 1.2rem;
+        margin: 2rem 0 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.4rem;
+        color: #374151;
+        font-weight: 600;
+      }
+      input[type="url"],
+      input[type="text"] {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        font-size: 1rem;
+      }
+      .field {
+        margin-bottom: 1rem;
+      }
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        margin-top: 0.5rem;
+        padding: 0.7rem 1rem;
+        border: none;
+        border-radius: 10px;
+        background: #111827;
+        color: #fff;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+      .result {
+        margin-top: 1rem;
+        padding: 0.75rem 1rem;
+        background: #f3f4f6;
+        border-radius: 10px;
+        word-break: break-word;
+      }
+      .error {
+        color: #b91c1c;
+        margin-top: 0.5rem;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      li {
+        margin-bottom: 0.75rem;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+      }
+      li a {
+        color: #1d4ed8;
+        text-decoration: none;
+        word-break: break-all;
+      }
+      li span {
+        display: block;
+        color: #4b5563;
+        font-size: 0.95rem;
+        margin-top: 0.25rem;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Link Shortener</h1>
+      <form onsubmit="shorten(event)">
+        <div class="field">
+          <label for="url">Original URL</label>
+          <input
+            id="url"
+            type="url"
+            placeholder="https://example.com/article"
+            required
+          />
+        </div>
+        <div class="field">
+          <label for="code">Custom short code</label>
+          <input
+            id="code"
+            type="text"
+            placeholder="e.g. promo-2025"
+            maxlength="32"
+            pattern="[A-Za-z0-9_-]+"
+            required
+          />
+        </div>
+        <button id="btn" type="submit">Shorten Link</button>
+      </form>
+      <div id="err" class="error"></div>
+      <div id="res" class="result"></div>
+      <div class="list">
+        <h2>Recently shortened links</h2>
+        <ul id="links"></ul>
+      </div>
+    </div>
+
+    <script>
+      async function shorten(ev) {
+        ev.preventDefault();
+        const btn = document.getElementById("btn");
+        const urlInput = document.getElementById("url");
+        const codeInput = document.getElementById("code");
+        const url = urlInput.value.trim();
+        const code = codeInput.value.trim();
+        const resBox = document.getElementById("res");
+        const errBox = document.getElementById("err");
+        resBox.textContent = "";
+        errBox.textContent = "";
+        if (!url || !code) {
+          errBox.textContent = "Original URL and short code are required.";
+          return;
+        }
+        btn.disabled = true;
+        try {
+          const payload = { url, code };
+          const resp = await fetch("/api/shorten", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!resp.ok) {
+            const msg =
+              resp.status === 409
+                ? "Short code already exists, pick another."
+                : "Request failed: " + resp.status;
+            throw new Error(msg);
+          }
+          const data = await resp.json();
+          const shortUrl = `${window.location.origin.replace(/:\d+$/, "")}/${
+            data.code
+          }`;
+          resBox.innerHTML = `Short link: <a href="${shortUrl}" target="_blank" rel="noopener noreferrer">${shortUrl}</a>`;
+          urlInput.value = "";
+          codeInput.value = "";
+          await fetchLinks();
+        } catch (e) {
+          errBox.textContent = e.message;
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      async function fetchLinks() {
+        const list = document.getElementById("links");
+        list.innerHTML = "<li>Loading…</li>";
+        try {
+          const resp = await fetch("/api/links");
+          if (!resp.ok) throw new Error("Failed to load links");
+          const data = await resp.json();
+          if (!Array.isArray(data) || data.length === 0) {
+            list.innerHTML = "<li>No links yet. Shorten something above!</li>";
+            return;
+          }
+          list.innerHTML = "";
+          data.forEach((item) => {
+            const shortUrl = `${window.location.origin.replace(/:\d+$/, "")}/${
+              item.code
+            }`;
+            const li = document.createElement("li");
+            li.innerHTML = `<a href="${shortUrl}" target="_blank" rel="noopener noreferrer">${shortUrl}</a><span>${item.url}</span>`;
+            list.appendChild(li);
+          });
+        } catch (err) {
+          list.innerHTML = `<li class="error">${err.message}</li>`;
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        fetchLinks();
+      });
+    </script>
+  </body>
+</html>
